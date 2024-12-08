@@ -11,8 +11,53 @@
  ***********************************************/
 
 #include "mapreduce.h"
+#include <pthread.h>
 
 // TODO: add your data structures and related functions here ...
+typedef struct Node{
+    char *key;
+    char *value;
+    struct Node *next;
+} Node; 
+
+typedef struct 
+{
+    Node *head;
+    pthread_mutex_t lock;
+} SortedLinkedList;
+
+void sorted_list_init(SortedLinkedList *list){
+    list->head = NULL;
+    pthread_mutex_init(&list->lock, NULL);
+}
+
+void sorted_list_insert(SortedLinkedList *list, char *key, char *value){
+    pthread_mutex_lock(&list->lock);
+
+    Node *new_node = malloc(sizeof(Node));
+    new_node->key = strdup(key);
+    new_node->value = strdup(value);
+    new_node->next = NULL;
+
+    if (!list->head || strcmp(key, list->head->key) < 0)
+    {
+        new_node->next = list->head;
+        list->head = new_node;
+    }
+    else
+    {
+        Node *current = list->head;
+        while (current->next && strcp(key, current->next->key) > 0)
+        {
+            current = current->next;
+        }
+        new_node->next = current->next;
+        current->next = new_node;
+    }
+    pthread_mutext_unlock(&list->lock);
+    
+    
+}
 
 // External functions: these are what you must define
 void MR_Emit(char *key, char *value) {
