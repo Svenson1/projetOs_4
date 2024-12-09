@@ -96,7 +96,6 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
     pthread_mutex_t file_lock; 
     pthread_mutex_init(&file_lock, NULL);
 
-
     void * map_work(void *arg){
         while (1)
         {
@@ -111,6 +110,7 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
         }
         return NULL;
     }
+
 
     for (int i = 0; i < num_mappers; i++)
     {
