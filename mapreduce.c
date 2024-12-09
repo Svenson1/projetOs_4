@@ -27,8 +27,8 @@ typedef struct
 } SortedLinkedList;
 
 int num_partitions;
-
 SortedLinkedList *partitions;
+Patitioner partitioner;
 
 void sorted_list_init(SortedLinkedList *list){
     list->head = NULL;
@@ -82,7 +82,41 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
         {
             sorted_list_init(&partitions[i]);
         }
-            
+    if (partition == NULL)
+    {
+        partitioner = MR_DefaultHashPartition;
+    }
+    else
+    {
+        partitioner = partition;
+    }
 
+    pthread_t mapper_threads[num_mappers];
+    int current_file = 1;
+    pthread_mutex_t file_lock; 
+    pthread_mutex_init(&file_lock, NULL);
+
+    void * map_work(void *arg){
+        while (1)
+        {
+            pthread_mutex_lock(&file_lock);
+            if (current_file >= argc){
+                pthread_mutex_unlock(&file_lock);
+                break;
+            }
+            char *file = argv[current_file];
+            pthread_mutex_unlock(&file_lock);
+            map(file);
+        }
+        return NULL;  
+    }
+    for (int i = 0; i < num_mappers; i++)
+    {
+        pthread_create(&mapper_threads[i], NULL, map_work, NULL);
+    }
+    for (int i = 0; i < num_mappers; i++)
+    {
+        pthread_join(mapper_threads[i], NULL);
+    } 
     // TODO
 }
