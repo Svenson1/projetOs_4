@@ -118,5 +118,6 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
     {
         pthread_join(mapper_threads[i], NULL);
     } 
-    // TODO
+    
+    pthread_mutex_destroy(&file_lock);
 }
