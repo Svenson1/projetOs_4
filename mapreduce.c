@@ -105,7 +105,7 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
                 pthread_mutex_unlock(&file_lock);
                 break;
             }
-            char *file = argv[current_file];
+            char *file = argv[current_file++];
             pthread_mutex_unlock(&file_lock);
             map(file);
         }
