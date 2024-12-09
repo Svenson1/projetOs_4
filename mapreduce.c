@@ -1,7 +1,7 @@
 /***********************************************
  * Project 4: Map-Reduce
  * 
- * Group Number : 
+ * Group Number : 10
  * Students     : Matteo Verkeyn Nathan Mahieu
  * 
  * Please explain here your choice of data structures :
@@ -54,14 +54,16 @@ void sorted_list_insert(SortedLinkedList *list, char *key, char *value){
         new_node->next = current->next;
         current->next = new_node;
     }
-    pthread_mutext_unlock(&list->lock);
-    
-    
+    pthread_mutext_unlock(&list->lock); 
 }
+
+int num_partitions;
+
+SortedLinkedList *partitions;
 
 // External functions: these are what you must define
 void MR_Emit(char *key, char *value) {
-    // TODO
+     
 }
 
 // DJB2 Hash function (http://www.cse.yorku.ca/~oz/hash.html)
@@ -73,9 +75,15 @@ unsigned long MR_DefaultHashPartition(char *key, int num_partitions) {
     return hash % num_partitions;
 }
 
-void MR_Run(int argc, char *argv[], 
-	    Mapper map, int num_mappers, 
-	    Reducer reduce, int num_reducers, 
-	    Partitioner partition) {
+void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce, int num_reducers, Partitioner partition) {
+
+    num_partitions = num_reducers;
+    partitions = malloc(sizeof(sorted_list_init) * num_partitions);
+    for (int i = 0; i < num_partitions; i++)
+        {
+            sorted_list_init(&partitions[i]);
+        }
+            
+
     // TODO
 }
