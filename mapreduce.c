@@ -26,6 +26,10 @@ typedef struct
     pthread_mutex_t lock;
 } SortedLinkedList;
 
+int num_partitions;
+
+SortedLinkedList *partitions;
+
 void sorted_list_init(SortedLinkedList *list){
     list->head = NULL;
     pthread_mutex_init(&list->lock, NULL);
@@ -56,11 +60,6 @@ void sorted_list_insert(SortedLinkedList *list, char *key, char *value){
     }
     pthread_mutext_unlock(&list->lock); 
 }
-
-int num_partitions;
-
-SortedLinkedList *partitions;
-
 // External functions: these are what you must define
 void MR_Emit(char *key, char *value) {
      
@@ -78,7 +77,7 @@ unsigned long MR_DefaultHashPartition(char *key, int num_partitions) {
 void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce, int num_reducers, Partitioner partition) {
 
     num_partitions = num_reducers;
-    partitions = malloc(sizeof(sorted_list_init) * num_partitions);
+    partitions = malloc(sizeof(SortedLinkedList) * num_partitions);
     for (int i = 0; i < num_partitions; i++)
         {
             sorted_list_init(&partitions[i]);
