@@ -85,17 +85,15 @@ char* get_next(char* key, int partition_number)
         current = node;
         currents_node[partition_number] = *current;
     }
+
+    Node * next = current->next;
+    if(strcmp(next->key, key) == NULL){
+        return next->key;
+    }
     else
     {
-        Node * next = current->next;
-        if(strcmp(next->key, key) == NULL){
-            return next->key;
-        }else
-        {
-            return NULL;
-        }
-    }
-    
+        return NULL;
+    }   
 }
 // External functions: these are what you must define
 void MR_Emit(char *key, char *value) {
@@ -112,6 +110,24 @@ unsigned long MR_DefaultHashPartition(char *key, int num_partitions) {
         hash = (hash << 5) + hash + c; // = hash * 33 + c
     return hash % num_partitions;
 }
+
+
+//pas besoin de mutex car chaque thread va travailler sur sa propre partition
+    void *reduce_work(void* arg){
+        int nb_partition = (int) arg;
+        Node *current = partitions[nb_partition].head;
+        Node *last_visit = malloc(sizeof(Node));
+        last_visit->key = NULL;
+        last_visit->value = NULL;
+        last_visit->next = NULL;
+
+        while (current->next != NULL && strcp(current->key, last_visit->key) != NULL)
+        {
+            last_visit = current;
+            reduce(current->key, get_next, nb_partition);
+        }
+        return NULL;
+    }
 
 
 void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce, int num_reducers, Partitioner partition) {
@@ -165,20 +181,9 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
 
     pthread_t reducers_threads[num_reducers];
     int current_partition = 0;
-
-    //pas besoin de mutex car chaque thread va travailler sur sa propre partition
-    void *reduce_work(void* arg){
-        Node current = (int) arg;
-        while (current->next != NULL)
-        {
-            reduce(current->key, get_next, nb_partition);
-        }
-        return NULL;
-    }
-
     for (int i = 0; i < num_reducers; i++)
     {
-        *current_partition = i;
+        current_partition = i;
         pthread_create(&reducers_threads[i], NULL, reduce_work, &current_partition);
     }
     for (int i = 0; i < num_reducers; i++)
