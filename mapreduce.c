@@ -16,13 +16,15 @@
 #include <string.h>
 
 // TODO: add your data structures and related functions here ...
+
+//noeuds pour liste chainée trié
 typedef struct Node{
     char *key;
     char *value;
     struct Node *next;
 } Node; 
 
-
+//liste chainée triée
 typedef struct 
 {
     Node *head;
@@ -41,7 +43,7 @@ void sorted_list_init(SortedLinkedList *list){
     pthread_mutex_init(&list->lock, NULL);
 }
 
-
+//Fonction d'intertion pour notre liste chainée triée
 void sorted_list_insert(SortedLinkedList *list, char *key, char *value){
     pthread_mutex_lock(&list->lock);
 
@@ -68,7 +70,7 @@ void sorted_list_insert(SortedLinkedList *list, char *key, char *value){
     pthread_mutex_unlock(&list->lock); 
 }
 
-
+//iterateur 
 char* get_next(char* key, int partition_number)
 {
     SortedLinkedList* partition = &partitions[partition_number];
@@ -81,7 +83,7 @@ char* get_next(char* key, int partition_number)
             node = node->next;
         }
         current = node;
-        currents_node[partition_number] = current;
+        currents_node[partition_number] = *current;
     }
     else
     {
@@ -114,14 +116,14 @@ unsigned long MR_DefaultHashPartition(char *key, int num_partitions) {
 
 void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce, int num_reducers, Partitioner partition) {
 
-    num_partitions = num_reducers;
-    partitions = malloc(sizeof(SortedLinkedList) * num_partitions);
+    num_partitions = num_reducers; //on a autant de partition que de reducers
+    partitions = malloc(sizeof(SortedLinkedList) * num_partitions); //on alloue la taille de partitions, qui correspond a un tableau de list chainée triée
     currents_node = malloc(sizeof(Node) * num_partitions);
     for (int i = 0; i < num_partitions; i++)
         {
             sorted_list_init(&partitions[i]);
         }
-    if (partition == NULL)
+    if (partition == NULL) //on verifie que l'utilisatuer a donner une fonction Partioner, si pas on en uitilise une par default
     {
         partitioner = MR_DefaultHashPartition;
     }
@@ -135,7 +137,7 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
     pthread_mutex_t file_lock; 
     pthread_mutex_init(&file_lock, NULL);
 
-    void * map_work(void *arg)
+    void * map_work(void *arg) //fontion sur laquel on va envoyer les threads mapper 
     {
         while (1)
         {
@@ -150,8 +152,6 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
         }
         return NULL;
     }
-
-
     for (int i = 0; i < num_mappers; i++)
     {
         pthread_create(&mapper_threads[i], NULL, map_work, NULL);
@@ -162,4 +162,30 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
     } 
     
     pthread_mutex_destroy(&file_lock);
+
+    pthread_t reducers_threads[num_reducers];
+    int current_partition = 0;
+
+    //pas besoin de mutex car chaque thread va travailler sur sa propre partition
+    void *reduce_work(void* arg){
+        Node current = (int) arg;
+        while (current->next != NULL)
+        {
+            reduce(current->key, get_next, nb_partition);
+        }
+        return NULL;
+    }
+
+    for (int i = 0; i < num_reducers; i++)
+    {
+        *current_partition = i;
+        pthread_create(&reducers_threads[i], NULL, reduce_work, &current_partition);
+    }
+    for (int i = 0; i < num_reducers; i++)
+    {
+        pthread_join(reducers_threads[i], NULL);
+    }
+    
+
+
 }
