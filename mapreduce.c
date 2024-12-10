@@ -12,6 +12,8 @@
 
 #include "mapreduce.h"
 #include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
 
 // TODO: add your data structures and related functions here ...
 typedef struct Node{
@@ -51,18 +53,20 @@ void sorted_list_insert(SortedLinkedList *list, char *key, char *value){
     else
     {
         Node *current = list->head;
-        while (current->next && strcp(key, current->next->key) > 0)
+        while (current->next && strcmp(key, current->next->key) > 0)
         {
             current = current->next;
         }
         new_node->next = current->next;
         current->next = new_node;
     }
-    pthread_mutext_unlock(&list->lock); 
+    pthread_mutex_unlock(&list->lock); 
 }
 // External functions: these are what you must define
 void MR_Emit(char *key, char *value) {
-     
+    int n = partitioner(key,num_partitions); // on récupère le numéro de la partion avec la fonction de partition déjà choisis
+    SortedLinkedList *partition = &partitions[n]; // on récupere la reférence de la liste à la partition n
+    sorted_list_insert(partition,key,value);// on insere la nouvelle clef valeur, la méthodde insert s'occupe des mutex
 }
 
 // DJB2 Hash function (http://www.cse.yorku.ca/~oz/hash.html)
@@ -96,7 +100,8 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
     pthread_mutex_t file_lock; 
     pthread_mutex_init(&file_lock, NULL);
 
-    void * map_work(void *arg){
+    void * map_work(void *arg)
+    {
         while (1)
         {
             pthread_mutex_lock(&file_lock);
