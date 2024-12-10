@@ -22,20 +22,25 @@ typedef struct Node{
     struct Node *next;
 } Node; 
 
+
 typedef struct 
 {
     Node *head;
     pthread_mutex_t lock;
 } SortedLinkedList;
 
+
 int num_partitions;
 SortedLinkedList *partitions;
 Partitioner partitioner;
+Node *currents_node;
+
 
 void sorted_list_init(SortedLinkedList *list){
     list->head = NULL;
     pthread_mutex_init(&list->lock, NULL);
 }
+
 
 void sorted_list_insert(SortedLinkedList *list, char *key, char *value){
     pthread_mutex_lock(&list->lock);
@@ -62,6 +67,34 @@ void sorted_list_insert(SortedLinkedList *list, char *key, char *value){
     }
     pthread_mutex_unlock(&list->lock); 
 }
+
+
+char* get_next(char* key, int partition_number)
+{
+    SortedLinkedList* partition = &partitions[partition_number];
+    Node*  current = &currents_node[partition_number];
+    if (current == NULL)
+    {
+        Node *node = partition->head;
+        while(strcmp(node->key, key) != NULL)
+        {
+            node = node->next;
+        }
+        current = node;
+        currents_node[partition_number] = current;
+    }
+    else
+    {
+        Node * next = current->next;
+        if(strcmp(next->key, key) == NULL){
+            return next->key;
+        }else
+        {
+            return NULL;
+        }
+    }
+    
+}
 // External functions: these are what you must define
 void MR_Emit(char *key, char *value) {
     int n = partitioner(key,num_partitions); // on récupère le numéro de la partion avec la fonction de partition déjà choisis
@@ -78,10 +111,12 @@ unsigned long MR_DefaultHashPartition(char *key, int num_partitions) {
     return hash % num_partitions;
 }
 
+
 void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce, int num_reducers, Partitioner partition) {
 
     num_partitions = num_reducers;
     partitions = malloc(sizeof(SortedLinkedList) * num_partitions);
+    currents_node = malloc(sizeof(Node) * num_partitions);
     for (int i = 0; i < num_partitions; i++)
         {
             sorted_list_init(&partitions[i]);
