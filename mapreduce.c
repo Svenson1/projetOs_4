@@ -53,6 +53,7 @@ int num_partitions;
 SortedLinkedList *partitions;
 Partitioner partitioner;
 Node **currents_node;
+int n;
 
 
 void sorted_list_init(SortedLinkedList *list){
@@ -90,33 +91,28 @@ void sorted_list_insert(SortedLinkedList *list, char *key, char *value){
 //iterateur 
 char* get_next(char* key, int partition_number)
 {
-    if (key == NULL) {
-    return NULL;
-    }
-    Node**  current = &currents_node[partition_number];
-    if (*current == NULL)
+    Node*  current = currents_node[partition_number];
+    if (current == NULL)
     {
-        Node *node = partitions[partition_number].head;
-        while(node && strcmp(node->key, key) != 0)
-        {
-            node = node->next;
-        }
-        *current = node;
+        return NULL;
     }
-    if (*current && strcmp((*current)->key, key) == 0)
+    if (strcmp((current)->key, key) != 0)
     {
-        char *value = (*current)->value;
-        *current =(*current)->next;
-        return value;
+        return NULL;
     }
-    
-    return NULL;
+    char * value = current->value;
+    currents_node[partition_number] = current->next;
+    return value;
 }
 // External functions: these are what you must define
 void MR_Emit(char *key, char *value) {
+    printf("début : %i\n", n);
+    printf("key : %s ///// valeur = %s\n",key, value);
     int n = partitioner(key,num_partitions); // on récupère le numéro de la partion avec la fonction de partition déjà choisis
     SortedLinkedList *partition = &partitions[n]; // on récupere la reférence de la liste à la partition n
     sorted_list_insert(partition,key,value);// on insere la nouvelle clef valeur, la méthodde insert s'occupe des mutex
+    printf("fin \n");
+    n++;
 }
 
 // DJB2 Hash function (http://www.cse.yorku.ca/~oz/hash.html)
@@ -132,28 +128,24 @@ unsigned long MR_DefaultHashPartition(char *key, int num_partitions) {
 //pas besoin de mutex car chaque thread va travailler sur sa propre partition
 void *reduce_work(void* arg){
     reduceWorkArgs * rargs = (reduceWorkArgs *) arg;
+
     int nb_partition = rargs->partition;
     Reducer reduce = rargs->reduce;
-    Node *current = partitions[nb_partition].head;
-    if(!current){
-        return NULL;
-    }
-
-    char *last_visit = strdup(current->key);
-
-    while (current != NULL)
+    Node *node = partitions[nb_partition].head;
+    char* key = node->key;
+    node = node->next;
+    reduce(key,get_next,nb_partition);
+    while (node != NULL)
     {
-        if (strcmp(current->key, last_visit) != 0)
-        {
-            free(last_visit);
-            last_visit = strdup(current->key);
-            reduce(current->key, get_next, nb_partition);
+        if(strcmp(node->key,key) != 0)
+        {  
+            key = node->key;
+            reduce(key, get_next, nb_partition);
         }
-        current = current->next;            
+        node = node->next;
     }
-    free(last_visit);
-    return NULL;
-    }
+    return 0;
+}
 
 
 void * map_work(void *arg) //fontion sur laquel on va envoyer les threads mapper 
@@ -180,6 +172,7 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
     num_partitions = num_reducers; //on a autant de partition que de reducers
     partitions = malloc(sizeof(SortedLinkedList) * num_partitions); //on alloue la taille de partitions, qui correspond a un tableau de list chainée triée
     currents_node = calloc(num_partitions, sizeof(Node *));
+    n = 0;
     for (int i = 0; i < num_partitions; i++)
         {
             sorted_list_init(&partitions[i]);
@@ -212,19 +205,27 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
     
     pthread_mutex_destroy(&file_lock);
 
+    for(int i = 0; i< num_reducers; i++)
+    {
+        currents_node[i] = partitions[i].head;
+    }
     pthread_t reducers_threads[num_reducers];
 
     for (int i = 0; i < num_reducers; i++)
     {
+        if(partitions[i].head==NULL){
+            continue;
+        }
         reduceWorkArgs *rargs = malloc(sizeof(reduceWorkArgs));
-        int partTab[num_reducers];
-        partTab[i] = i;
-        rargs->partition = partTab[i];
+        rargs->partition = i;
         rargs->reduce = reduce; 
         pthread_create(&reducers_threads[i], NULL, reduce_work, rargs);
     }
     for (int i = 0; i < num_reducers; i++)
     {
+        if(partitions[i].head==NULL){
+            continue;
+        }
         pthread_join(reducers_threads[i], NULL);
     }
     
