@@ -53,7 +53,6 @@ int num_partitions;
 SortedLinkedList *partitions;
 Partitioner partitioner;
 Node **currents_node;
-int n;
 
 
 void sorted_list_init(SortedLinkedList *list){
@@ -88,6 +87,20 @@ void sorted_list_insert(SortedLinkedList *list, char *key, char *value){
     pthread_mutex_unlock(&list->lock); 
 }
 
+void* free_list(SortedLinkedList list)
+{
+    Node* node = list.head;
+    while(node != NULL){
+        Node * next = node->next;
+        free(node->key);
+        free(node->value);
+        node = next;
+    }
+
+    return 0;
+}
+
+
 //iterateur 
 char* get_next(char* key, int partition_number)
 {
@@ -106,13 +119,9 @@ char* get_next(char* key, int partition_number)
 }
 // External functions: these are what you must define
 void MR_Emit(char *key, char *value) {
-    printf("début : %i\n", n);
-    printf("key : %s ///// valeur = %s\n",key, value);
     int n = partitioner(key,num_partitions); // on récupère le numéro de la partion avec la fonction de partition déjà choisis
     SortedLinkedList *partition = &partitions[n]; // on récupere la reférence de la liste à la partition n
     sorted_list_insert(partition,key,value);// on insere la nouvelle clef valeur, la méthodde insert s'occupe des mutex
-    printf("fin \n");
-    n++;
 }
 
 // DJB2 Hash function (http://www.cse.yorku.ca/~oz/hash.html)
@@ -172,7 +181,6 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
     num_partitions = num_reducers; //on a autant de partition que de reducers
     partitions = malloc(sizeof(SortedLinkedList) * num_partitions); //on alloue la taille de partitions, qui correspond a un tableau de list chainée triée
     currents_node = calloc(num_partitions, sizeof(Node *));
-    n = 0;
     for (int i = 0; i < num_partitions; i++)
         {
             sorted_list_init(&partitions[i]);
@@ -228,5 +236,10 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
         }
         pthread_join(reducers_threads[i], NULL);
     }
+    for(int i = 0; num_partitions; i++){
+        free_list(partitions[i]);
+    }
+    free(partitions);
+    free(currents_node);
     
 }
