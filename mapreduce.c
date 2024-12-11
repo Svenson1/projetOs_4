@@ -14,6 +14,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 // TODO: add your data structures and related functions here ...
 
@@ -31,11 +32,27 @@ typedef struct
     pthread_mutex_t lock;
 } SortedLinkedList;
 
+typedef struct
+{
+    int argc;
+    char ** argv;
+    int * current_file;
+    pthread_mutex_t *file_lock;
+    Mapper map;
+}mapWorkArgs;
+
+typedef struct
+{
+    int partition;
+    Reducer reduce;
+}reduceWorkArgs;
+
+
 
 int num_partitions;
 SortedLinkedList *partitions;
 Partitioner partitioner;
-Node *currents_node;
+Node **currents_node;
 
 
 void sorted_list_init(SortedLinkedList *list){
@@ -73,27 +90,27 @@ void sorted_list_insert(SortedLinkedList *list, char *key, char *value){
 //iterateur 
 char* get_next(char* key, int partition_number)
 {
-    SortedLinkedList* partition = &partitions[partition_number];
-    Node*  current = &currents_node[partition_number];
-    if (current == NULL)
+    if (key == NULL) {
+    return NULL;
+    }
+    Node**  current = &currents_node[partition_number];
+    if (*current == NULL)
     {
-        Node *node = partition->head;
-        while(strcmp(node->key, key) != NULL)
+        Node *node = partitions[partition_number].head;
+        while(node && strcmp(node->key, key) != 0)
         {
             node = node->next;
         }
-        current = node;
-        currents_node[partition_number] = *current;
+        *current = node;
     }
-
-    Node * next = current->next;
-    if(strcmp(next->key, key) == NULL){
-        return next->key;
-    }
-    else
+    if (*current && strcmp((*current)->key, key) == 0)
     {
-        return NULL;
-    }   
+        char *value = (*current)->value;
+        *current =(*current)->next;
+        return value;
+    }
+    
+    return NULL;
 }
 // External functions: these are what you must define
 void MR_Emit(char *key, char *value) {
@@ -113,28 +130,56 @@ unsigned long MR_DefaultHashPartition(char *key, int num_partitions) {
 
 
 //pas besoin de mutex car chaque thread va travailler sur sa propre partition
-    void *reduce_work(void* arg){
-        int nb_partition = (int) arg;
-        Node *current = partitions[nb_partition].head;
-        Node *last_visit = malloc(sizeof(Node));
-        last_visit->key = NULL;
-        last_visit->value = NULL;
-        last_visit->next = NULL;
+void *reduce_work(void* arg){
+    reduceWorkArgs * rargs = (reduceWorkArgs *) arg;
+    int nb_partition = rargs->partition;
+    Reducer reduce = rargs->reduce;
+    Node *current = partitions[nb_partition].head;
+    if(!current){
+        return NULL;
+    }
 
-        while (current->next != NULL && strcp(current->key, last_visit->key) != NULL)
+    char *last_visit = strdup(current->key);
+
+    while (current != NULL)
+    {
+        if (strcmp(current->key, last_visit) != 0)
         {
-            last_visit = current;
+            free(last_visit);
+            last_visit = strdup(current->key);
             reduce(current->key, get_next, nb_partition);
+        }
+        current = current->next;            
+    }
+    free(last_visit);
+    return NULL;
+    }
+
+
+void * map_work(void *arg) //fontion sur laquel on va envoyer les threads mapper 
+    {
+        mapWorkArgs *args = (mapWorkArgs*) arg;
+        while (1)
+        {   
+            pthread_mutex_lock(args->file_lock);
+            if (*(args->current_file) >= args->argc){
+                pthread_mutex_unlock(args->file_lock);
+                break;
+            }
+            char *file = args->argv[(*(args->current_file))++];
+            pthread_mutex_unlock(args->file_lock);
+            args->map(file);
         }
         return NULL;
     }
+
 
 
 void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce, int num_reducers, Partitioner partition) {
 
     num_partitions = num_reducers; //on a autant de partition que de reducers
     partitions = malloc(sizeof(SortedLinkedList) * num_partitions); //on alloue la taille de partitions, qui correspond a un tableau de list chainée triée
-    currents_node = malloc(sizeof(Node) * num_partitions);
+    currents_node = calloc(num_partitions, sizeof(Node *));
     for (int i = 0; i < num_partitions; i++)
         {
             sorted_list_init(&partitions[i]);
@@ -149,28 +194,16 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
     }
 
     pthread_t mapper_threads[num_mappers];
+    
     int current_file = 1;
     pthread_mutex_t file_lock; 
     pthread_mutex_init(&file_lock, NULL);
 
-    void * map_work(void *arg) //fontion sur laquel on va envoyer les threads mapper 
-    {
-        while (1)
-        {
-            pthread_mutex_lock(&file_lock);
-            if (current_file >= argc){
-                pthread_mutex_unlock(&file_lock);
-                break;
-            }
-            char *file = argv[current_file++];
-            pthread_mutex_unlock(&file_lock);
-            map(file);
-        }
-        return NULL;
-    }
+    mapWorkArgs args = {argc,argv, &current_file, &file_lock, map};
+
     for (int i = 0; i < num_mappers; i++)
     {
-        pthread_create(&mapper_threads[i], NULL, map_work, NULL);
+        pthread_create(&mapper_threads[i], NULL, map_work, &args);
     }
     for (int i = 0; i < num_mappers; i++)
     {
@@ -180,17 +213,19 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
     pthread_mutex_destroy(&file_lock);
 
     pthread_t reducers_threads[num_reducers];
-    int current_partition = 0;
+
     for (int i = 0; i < num_reducers; i++)
     {
-        current_partition = i;
-        pthread_create(&reducers_threads[i], NULL, reduce_work, &current_partition);
+        reduceWorkArgs *rargs = malloc(sizeof(reduceWorkArgs));
+        int partTab[num_reducers];
+        partTab[i] = i;
+        rargs->partition = partTab[i];
+        rargs->reduce = reduce; 
+        pthread_create(&reducers_threads[i], NULL, reduce_work, rargs);
     }
     for (int i = 0; i < num_reducers; i++)
     {
         pthread_join(reducers_threads[i], NULL);
     }
     
-
-
 }
