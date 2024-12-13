@@ -5,9 +5,9 @@
  * Students     : Matteo Verkeyn Nathan Mahieu
  * 
  * Please explain here your choice of data structures :
- * 
- * 
- * 
+ * on a choisit une liste chainée triée
+ * la liste est triée pendant l'insertion cela permet de considérer les liste tout le temps triée
+ * les méthode d'intération sur une liste chainée sont aussi rapide et efficace
  ***********************************************/
 
 #include "mapreduce.h"
@@ -18,12 +18,17 @@
 
 // TODO: add your data structures and related functions here ...
 
+/**********************
+* structures globales *
+**********************/
+
 //noeuds pour liste chainée trié
 typedef struct Node{
     char *key;
     char *value;
     struct Node *next;
 } Node; 
+
 
 //liste chainée triée
 typedef struct 
@@ -32,6 +37,8 @@ typedef struct
     pthread_mutex_t lock;
 } SortedLinkedList;
 
+
+// arguments de la fonction map
 typedef struct
 {
     int argc;
@@ -41,6 +48,8 @@ typedef struct
     Mapper map;
 }mapWorkArgs;
 
+
+// arguments de la fonction reduce
 typedef struct
 {
     int partition;
@@ -48,17 +57,24 @@ typedef struct
 }reduceWorkArgs;
 
 
-
+/*********************
+* variables globales *
+**********************/
 int num_partitions;
 SortedLinkedList *partitions;
 Partitioner partitioner;
 Node **currents_node;
 
+/************************
+* fonctions et methodes *
+************************/
 
+// initialisation des liste 
 void sorted_list_init(SortedLinkedList *list){
     list->head = NULL;
     pthread_mutex_init(&list->lock, NULL);
 }
+
 
 //Fonction d'intertion pour notre liste chainée triée
 void sorted_list_insert(SortedLinkedList *list, char *key, char *value){
@@ -87,6 +103,8 @@ void sorted_list_insert(SortedLinkedList *list, char *key, char *value){
     pthread_mutex_unlock(&list->lock); 
 }
 
+
+// fonction qui free la struc list
 void free_list(SortedLinkedList list)
 {
     Node* current = list.head;
@@ -117,12 +135,15 @@ char* get_next(char* key, int partition_number)
     currents_node[partition_number] = current->next;
     return value;
 }
+
+
 // External functions: these are what you must define
 void MR_Emit(char *key, char *value) {
     int n = partitioner(key,num_partitions); // on récupère le numéro de la partion avec la fonction de partition déjà choisis
     SortedLinkedList *partition = &partitions[n]; // on récupere la reférence de la liste à la partition n
     sorted_list_insert(partition,key,value);// on insere la nouvelle clef valeur, la méthodde insert s'occupe des mutex
 }
+
 
 // DJB2 Hash function (http://www.cse.yorku.ca/~oz/hash.html)
 unsigned long MR_DefaultHashPartition(char *key, int num_partitions) {
@@ -158,6 +179,7 @@ void *reduce_work(void* arg){
 }
 
 
+// fonction qui permet de lancer les thread
 void * map_work(void *arg) //fontion sur laquel on va envoyer les threads mapper 
     {
         mapWorkArgs *args = (mapWorkArgs*) arg;
@@ -176,7 +198,7 @@ void * map_work(void *arg) //fontion sur laquel on va envoyer les threads mapper
     }
 
 
-
+// fonction qui crée et lance les thread ainsi que les variables
 void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce, int num_reducers, Partitioner partition) {
 
     num_partitions = num_reducers; //on a autant de partition que de reducers
