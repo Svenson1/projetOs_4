@@ -87,17 +87,17 @@ void sorted_list_insert(SortedLinkedList *list, char *key, char *value){
     pthread_mutex_unlock(&list->lock); 
 }
 
-void* free_list(SortedLinkedList list)
+void free_list(SortedLinkedList list)
 {
-    Node* node = list.head;
-    while(node != NULL){
-        Node * next = node->next;
-        free(node->key);
-        free(node->value);
-        node = next;
+    Node* current = list.head;
+    while(current){
+        Node * temp = current;
+        current = current->next;
+        free(temp->key);
+        free(temp->value);
+        free(temp);
     }
-
-    return 0;
+    pthread_mutex_destroy(&list.lock);
 }
 
 
@@ -153,6 +153,7 @@ void *reduce_work(void* arg){
         }
         node = node->next;
     }
+    free(rargs);
     return 0;
 }
 
@@ -236,9 +237,11 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
         }
         pthread_join(reducers_threads[i], NULL);
     }
-    for(int i = 0; num_partitions; i++){
+    for (int i = 0; i < num_partitions; i++)
+    {
         free_list(partitions[i]);
     }
+    
     free(partitions);
     free(currents_node);
     
