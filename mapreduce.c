@@ -23,7 +23,8 @@
 **********************/
 
 //noeuds pour liste chainée trié
-typedef struct Node{
+typedef struct Node
+{
     char *key;
     char *value;
     struct Node *next;
@@ -60,10 +61,10 @@ typedef struct
 /*********************
 * variables globales *
 **********************/
-int num_partitions;
-SortedLinkedList *partitions;
-Partitioner partitioner;
-Node **currents_node;
+int num_partitions; // nombres de partitions
+SortedLinkedList *partitions; // tableau de liste (le tableau de partition)
+Partitioner partitioner; // reference vers le partionner
+Node **currents_node; // tableau de noeud dans lequel on garde la reference vers le noeud actuel de la liste
 
 /************************
 * fonctions et methodes *
@@ -104,7 +105,7 @@ void sorted_list_insert(SortedLinkedList *list, char *key, char *value){
 }
 
 
-// fonction qui free la struc list
+// fonction qui free la struc list ainsi que les noeuds 
 void free_list(SortedLinkedList list)
 {
     Node* current = list.head;
@@ -138,6 +139,7 @@ char* get_next(char* key, int partition_number)
 
 
 // External functions: these are what you must define
+//fonction qui permet de partionner les mots
 void MR_Emit(char *key, char *value) {
     int n = partitioner(key,num_partitions); // on récupère le numéro de la partion avec la fonction de partition déjà choisis
     SortedLinkedList *partition = &partitions[n]; // on récupere la reférence de la liste à la partition n
@@ -158,7 +160,6 @@ unsigned long MR_DefaultHashPartition(char *key, int num_partitions) {
 //pas besoin de mutex car chaque thread va travailler sur sa propre partition
 void *reduce_work(void* arg){
     reduceWorkArgs * rargs = (reduceWorkArgs *) arg;
-
     int nb_partition = rargs->partition;
     Reducer reduce = rargs->reduce;
     Node *node = partitions[nb_partition].head;
@@ -204,7 +205,8 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
     num_partitions = num_reducers; //on a autant de partition que de reducers
     partitions = malloc(sizeof(SortedLinkedList) * num_partitions); //on alloue la taille de partitions, qui correspond a un tableau de list chainée triée
     currents_node = calloc(num_partitions, sizeof(Node *));
-    for (int i = 0; i < num_partitions; i++)
+
+    for (int i = 0; i < num_partitions; i++) // initialisation des listes
         {
             sorted_list_init(&partitions[i]);
         }
@@ -218,33 +220,32 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
     }
 
     pthread_t mapper_threads[num_mappers];
-    
     int current_file = 1;
     pthread_mutex_t file_lock; 
     pthread_mutex_init(&file_lock, NULL);
-
     mapWorkArgs args = {argc,argv, &current_file, &file_lock, map};
 
-    for (int i = 0; i < num_mappers; i++)
+    for (int i = 0; i < num_mappers; i++)// creation des thread mapper
     {
         pthread_create(&mapper_threads[i], NULL, map_work, &args);
     }
-    for (int i = 0; i < num_mappers; i++)
+    for (int i = 0; i < num_mappers; i++) // attende de tout les thread avant de continuer
     {
         pthread_join(mapper_threads[i], NULL);
     } 
     
     pthread_mutex_destroy(&file_lock);
 
-    for(int i = 0; i< num_reducers; i++)
+    for(int i = 0; i< num_reducers; i++) // initialisation des noeuds courrants avec la tête de chque liste des partitions
     {
         currents_node[i] = partitions[i].head;
     }
-    pthread_t reducers_threads[num_reducers];
 
-    for (int i = 0; i < num_reducers; i++)
+    pthread_t reducers_threads[num_reducers];
+    for (int i = 0; i < num_reducers; i++) // création des threads reducer
     {
-        if(partitions[i].head==NULL){
+        if(partitions[i].head==NULL)
+        {
             continue;
         }
         reduceWorkArgs *rargs = malloc(sizeof(reduceWorkArgs));
@@ -252,19 +253,20 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
         rargs->reduce = reduce; 
         pthread_create(&reducers_threads[i], NULL, reduce_work, rargs);
     }
-    for (int i = 0; i < num_reducers; i++)
+    for (int i = 0; i < num_reducers; i++) // on attend la fin des threads reducer 
     {
-        if(partitions[i].head==NULL){
+        if(partitions[i].head==NULL)
+        {
             continue;
         }
         pthread_join(reducers_threads[i], NULL);
     }
-    for (int i = 0; i < num_partitions; i++)
+    for (int i = 0; i < num_partitions; i++) // free de toute les liste 
     {
         free_list(partitions[i]);
     }
     
-    free(partitions);
-    free(currents_node);
+    free(partitions); // free du tableau de partition
+    free(currents_node);// free du tableau de noeud courrant
     
 }
