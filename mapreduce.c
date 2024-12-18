@@ -7,7 +7,12 @@
  * Please explain here your choice of data structures :
  * on a choisit une liste chainée triée
  * la liste est triée pendant l'insertion cela permet de considérer les liste tout le temps triée
- * les méthode d'intération sur une liste chainée sont aussi rapide et efficace
+ * les méthode d'intération sur une liste chainée sont aussi rapide et efficace.asm
+ * On s'est rendu compte une fois le travail fini que notre structure de donnée etait pas la meilleur. En effet l'insertion trié
+ * fais que notre programme a une complexitée en O(n^2)
+ * On a pas eu le temps de refaire le projet mais on a penser a une meilleure solution:
+ * On pense que on aurait pu utiliser des tableau a la place de liste chainée, en effet le trie d'un tableau ce fait en O(nlog(n))
+ * ce qui est largement mieux
  ***********************************************/
 
 #include "mapreduce.h"
